@@ -51,7 +51,7 @@ function openLevel(id,tab){
   showTab(lv,tab);
 }
 let showTab=function(lv,tab){
-  S.tab=tab;localStorage.setItem(KEY,JSON.stringify(S));window.speechSynthesis&&speechSynthesis.cancel();
+  S.tab=tab;localStorage.setItem(KEY,JSON.stringify(S));typeof stopSpeech==='function'&&stopSpeech();
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   const p=$('#panel');
   if(tab==='learn')p.innerHTML=lv.topics.map((t,i)=>topicHTML(lv,t,i)).join('');
@@ -59,6 +59,7 @@ let showTab=function(lv,tab){
   if(tab==='quiz')p.innerHTML=quizHTML(lv);
   if(tab==='listen')p.innerHTML=listenHTML(lv);
   if(tab==='speak')p.innerHTML=speakHTML(lv);
+  const vs=document.getElementById('voiceSel');if(vs)fillVoiceSel(vs);
 }
 function topicHTML(lv,t,i){
   const k=lv.id+'-'+i,done=S.topics[k];
@@ -158,14 +159,65 @@ function renderWeak(lv){
 }
 /* ===== Escuchar (TTS) ===== */
 const hasTTS='speechSynthesis' in window;
-function voice(){const v=speechSynthesis.getVoices();return v.find(x=>/^en(-|_)US/i.test(x.lang))||v.find(x=>/^en/i.test(x.lang));}
-function speak(text,rate,onend){if(!hasTTS)return;const u=new SpeechSynthesisUtterance(text);u.lang='en-US';const v=voice();if(v)u.voice=v;u.rate=rate||0.9;if(onend)u.onend=onend;speechSynthesis.speak(u);}
-function playDialogue(lv,rate){speechSynthesis.cancel();lv.listening.dialogue.forEach(d=>speak(d[1],rate));}
+/* --- Selección de voz natural en-US --- */
+let VOICES=[];
+function loadVoices(){if(!hasTTS)return;VOICES=speechSynthesis.getVoices()||[];const sel=document.getElementById('voiceSel');if(sel)fillVoiceSel(sel);}
+function scoreVoice(v){
+  let s=0;const n=(v.name||'').toLowerCase(),lang=(v.lang||'').replace('_','-').toLowerCase();
+  if(lang==='en-us')s+=100;else if(lang.startsWith('en'))s+=40;else return -1;
+  if(/premium/.test(n))s+=60;if(/enhanced|mejorad|natural|neural|online/.test(n))s+=50;
+  if(/google us english/.test(n))s+=45;
+  if(/(samantha|allison|ava|zoe|nicky|evan|nathan|joelle|noelle|susan|tom|jenny|aria|guy|michelle|emma|brian|andrew|christopher)/.test(n))s+=30;
+  if(v.localService===false)s+=25;
+  if(/(albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|good news|hysterical|jester|organ|superstar|trinoids|whisper|wobble|zarvox|junior|ralph|fred|kathy|princess|grandma|grandpa|rocko|shelley|flo|eddy|reed|sandy)/.test(n))s-=200;
+  if(/espeak|compact/.test(n))s-=40;
+  return s;
+}
+function rankedVoices(){return VOICES.map(v=>[scoreVoice(v),v]).filter(x=>x[0]>=0).sort((a,b)=>b[0]-a[0]).map(x=>x[1]);}
+function voice(alt){const r=rankedVoices();if(!r.length)return null;
+  const pref=S.voice&&r.find(v=>v.voiceURI===S.voice);const main=pref||r[0];
+  if(!alt)return main;const us=r.filter(v=>v!==main&&/en.us/i.test(v.lang.replace('_','-')));return us[0]||main;}
+function fillVoiceSel(sel){const r=rankedVoices();const cur=(voice()||{}).voiceURI;
+  sel.innerHTML=r.length?r.slice(0,15).map(v=>`<option value="${esc(v.voiceURI)}"${v.voiceURI===cur?' selected':''}>${esc(v.name)} (${esc(v.lang)})${v.localService===false?' ☁️':''}</option>`).join(''):'<option>Voz predeterminada del dispositivo</option>';}
+function sentences(t){return (t.match(/[^.!?]+[.!?]*["”]?\s*/g)||[t]).map(x=>x.trim()).filter(Boolean);}
+let speakQueue=[],speakTimer=null,speakId=0;
+function stopSpeech(){speakId++;speakQueue=[];clearTimeout(speakTimer);if(hasTTS)speechSynthesis.cancel();}
+function runQueue(id){
+  if(id!==speakId||!speakQueue.length)return;
+  const it=speakQueue.shift();
+  const u=new SpeechSynthesisUtterance(it.text);const v=it.v;if(v){u.voice=v;u.lang=v.lang;}else u.lang='en-US';
+  u.rate=it.rate;u.pitch=it.pitch||1;u.volume=1;
+  let done=false;const next=()=>{if(done)return;done=true;clearTimeout(guard);speakTimer=setTimeout(()=>runQueue(id),it.pause);};
+  u.onend=next;u.onerror=next;
+  const guard=setTimeout(next,Math.max(4000,it.text.length*160/it.rate)); // iOS a veces no dispara onend
+  speechSynthesis.speak(u);
+  if(speechSynthesis.paused)speechSynthesis.resume();
+}
+/* lines: [{text, alt}] */
+function speakLines(lines,rate){
+  if(!hasTTS)return;stopSpeech();const id=speakId;if(!VOICES.length)loadVoices();
+  const slow=rate<0.8;
+  lines.forEach((ln,li)=>{const v=voice(ln.alt);const ss=sentences(ln.text);
+    ss.forEach((s,si)=>speakQueue.push({text:s,v,rate,pitch:ln.alt?0.98:1.02,pause:si===ss.length-1?(slow?750:520):(slow?380:240)}));});
+  setTimeout(()=>runQueue(id),60); // tras cancel(), iOS necesita un respiro
+}
+function speak(text,rate){speakLines([{text}],rate||RATE.normal);}
+const RATE={normal:0.9,slow:0.7};
+function playDialogue(lv,rate){const sp=[];lv.listening.dialogue.forEach(d=>{if(!sp.includes(d[0]))sp.push(d[0]);});
+  speakLines(lv.listening.dialogue.map(d=>({text:d[1],alt:sp.indexOf(d[0])%2===1})),rate);}
+if(hasTTS){loadVoices();speechSynthesis.addEventListener?speechSynthesis.addEventListener('voiceschanged',loadVoices):(speechSynthesis.onvoiceschanged=loadVoices);
+  setTimeout(loadVoices,500);setTimeout(loadVoices,1500);
+  // Desbloqueo de audio en iOS con el primer gesto
+  const unlock=()=>{try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u);}catch(e){}loadVoices();document.removeEventListener('touchend',unlock);document.removeEventListener('click',unlock);};
+  document.addEventListener('touchend',unlock,{once:true});document.addEventListener('click',unlock,{once:true});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopSpeech();});}
+function voiceBox(){if(!hasTTS)return '';return `<div class="voice-box"><label for="voiceSel">🇺🇸 Voz en inglés de EE. UU.:</label><select id="voiceSel"></select><button type="button" class="btn secondary" data-say="Hi! This is how I sound. Nice to meet you.">🔊 Probar voz</button>
+<p class="voice-note">ℹ️ La calidad depende de las voces de tu dispositivo. En iPhone usa <b>Safari</b> y descarga una voz mejorada: Ajustes → Accesibilidad → Contenido leído → Voces → Inglés (EE. UU.) → p. ej. <b>Ava (Premium)</b>, <b>Zoe</b> o <b>Samantha (Mejorada)</b>. Las voces ☁️ son en línea y suenan más naturales. Navegadores como Brave pueden mostrar menos voces.</p></div>`;}
 function listenHTML(lv){
   const L2=lv.listening,ls=S.listen[lv.id];
   const warn=hasTTS?'':'<div class="tip">⚠️ Tu navegador no soporta síntesis de voz. Puedes leer la transcripción para practicar.</div>';
-  return `<div class="card"><h3>🎧 Escuchar: ${esc(L2.title)}</h3><p>Escucha el diálogo (sin leer 🙈), responde las preguntas y completa el dictado. ${ls?`<span class="badge">Mejor: ${ls.best}/${ls.total}</span>`:''}</p>${warn}
-  <button class="btn" data-play="0.9">▶️ Reproducir</button> <button class="btn secondary" data-play="0.65">🐢 Lento</button> <button class="btn secondary" data-stop="1">⏹️ Parar</button> <button class="btn secondary" data-transcript="1">📜 Ver transcripción</button>
+  return `<div class="card"><h3>🎧 Escuchar: ${esc(L2.title)}</h3><p>Escucha el diálogo (sin leer 🙈), responde las preguntas y completa el dictado. ${ls?`<span class="badge">Mejor: ${ls.best}/${ls.total}</span>`:''}</p>${warn}${voiceBox()}
+  <button class="btn" data-play="0.9">▶️ Reproducir</button> <button class="btn secondary" data-play="0.7">🐢 Lento</button> <button class="btn secondary" data-stop="1">⏹️ Parar</button> <button class="btn secondary" data-transcript="1">📜 Ver transcripción</button>
   <div id="transcript" hidden><ul class="examples">${L2.dialogue.map(d=>`<li><span class="en">${esc(d[0])}: ${esc(d[1])}</span></li>`).join('')}</ul></div></div>
   <form id="listenForm" class="card"><h4>❓ Comprensión</h4>${L2.questions.map((x,i)=>`<div class="q" id="lq-${i}"><fieldset><legend>${i+1}. ${esc(x.q)}</legend>${x.o.map((o,j)=>`<label id="ll-${i}-${j}"><input type="radio" name="lq${i}" value="${j}"> ${esc(o)}</label>`).join('')}</fieldset><div class="exp"></div></div>`).join('')}
   <h4>✍️ Dictado: escucha y escribe exactamente</h4>${L2.dictation.map((d,i)=>`<div class="q" id="ld-${i}"><button type="button" class="btn secondary" data-say="${esc(d)}">🔊 Frase ${i+1}</button><input type="text" class="dict" id="dict-${i}" autocomplete="off" autocapitalize="off" placeholder="Escribe lo que escuchas…" aria-label="Dictado ${i+1}"><div class="exp"></div></div>`).join('')}
@@ -197,9 +249,9 @@ function gradeListen(lv){
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 function speakHTML(lv){
   const fallback=SR?'':'<div class="tip">⚠️ Tu navegador no tiene reconocimiento de voz (prueba Chrome, Edge o Safari en iPhone con Siri activado). Puedes <b>escribir</b> lo que dirías y la app lo evaluará igual; tu puntuación se marcará como “escrita”.</div>';
-  return `<div class="card"><h3>🎤 Hablar</h3><p>1️⃣ Escucha el modelo 🔊 · 2️⃣ Pulsa 🎙️ y repite en voz alta · 3️⃣ Recibe tu nota de pronunciación y fluidez.</p>${fallback}</div>`+
+  return `<div class="card"><h3>🎤 Hablar</h3><p>1️⃣ Escucha el modelo 🔊 · 2️⃣ Pulsa 🎙️ y repite en voz alta · 3️⃣ Recibe tu nota de pronunciación y fluidez.</p>${fallback}${voiceBox()}</div>`+
   lv.speaking.map((p,i)=>{const sc=S.speak[lv.id+'-'+i];return `<div class="card speak-card"><h4>${sc>=70?'✅':'🗣️'} Frase ${i+1} ${sc!=null?`<span class="badge">Mejor: ${sc}%</span>`:''}</h4><p class="target">"${esc(p)}"</p>
-  <button class="btn secondary" data-say="${esc(p)}">🔊 Escuchar modelo</button> ${SR?`<button class="btn mic" data-mic="${i}">🎙️ Hablar</button>`:''}
+  <button class="btn secondary" data-say="${esc(p)}">🔊 Escuchar modelo</button> <button class="btn secondary" data-say="${esc(p)}" data-rate="0.7">🐢 Lento</button> ${SR?`<button class="btn mic" data-mic="${i}">🎙️ Hablar</button>`:''}
   <div class="type-alt"><input type="text" id="sp-${i}" placeholder="${SR?'…o escribe si no puedes usar el micrófono':'Escribe la frase aquí'}" aria-label="Alternativa escrita"><button class="btn secondary" data-typed="${i}">Evaluar ✔️</button></div>
   <div class="feedback" id="spfb-${i}" aria-live="polite"></div></div>`;}).join('');
 }
@@ -224,14 +276,14 @@ function startMic(lv,i,btn){
 document.addEventListener('click',e=>{
   const lv=L.find(l=>l.id===S.current);if(!lv)return;
   const pl=e.target.closest('[data-play]');if(pl){if(hasTTS)playDialogue(lv,+pl.dataset.play);return;}
-  if(e.target.closest('[data-stop]')){hasTTS&&speechSynthesis.cancel();return;}
+  if(e.target.closest('[data-stop]')){stopSpeech();return;}
   if(e.target.closest('[data-transcript]')){const t=$('#transcript');t.hidden=!t.hidden;return;}
-  const sy=e.target.closest('[data-say]');if(sy){e.preventDefault();if(hasTTS){speechSynthesis.cancel();speak(sy.dataset.say,0.85);}return;}
+  const sy=e.target.closest('[data-say]');if(sy){e.preventDefault();if(hasTTS)speak(sy.dataset.say,+(sy.dataset.rate||RATE.normal));return;}
   const mi=e.target.closest('[data-mic]');if(mi){startMic(lv,+mi.dataset.mic,mi);return;}
   const ty=e.target.closest('[data-typed]');if(ty){const i=+ty.dataset.typed,v=$('#sp-'+i).value.trim();if(!v){const fb=$('#spfb-'+i);fb.className='feedback show bad';fb.textContent='✏️ Escribe la frase primero.';return;}scoreSpeak(lv,i,v,null,true);return;}
 });
 document.addEventListener('submit',e=>{if(e.target.id==='listenForm'){e.preventDefault();gradeListen(L.find(l=>l.id===S.current));}});
-if(hasTTS)speechSynthesis.onvoiceschanged=()=>{};
+document.addEventListener('change',e=>{if(e.target.id==='voiceSel'){S.voice=e.target.value;save();speak('Great choice. This is my voice.');}});
 
 $('#refreshBtn').addEventListener('click',async()=>{
   const b=$('#refreshBtn');b.classList.add('spin');save(); // el progreso queda en localStorage
