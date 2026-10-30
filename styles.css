@@ -148,4 +148,7 @@ pre.diagram{white-space:pre;-webkit-overflow-scrolling:touch;font-size:clamp(.68
   .bn.active span{transform:translateY(-2px) scale(1.12)}
 }
 
-/* deploy 20261030175144 */
+.voice-box{background:#f3f0ff;border-radius:16px;padding:.8rem 1rem;margin:.8rem 0}
+.voice-box label{font-weight:900;display:block;margin-bottom:.3rem}
+.voice-box select{width:100%;min-height:44px;border:2px solid #d9d0ff;border-radius:12px;padding:.4rem .6rem;background:#fff;font:inherit}
+.voice-note{font-size:.85rem;color:var(--muted);margin:.5rem 0 0}
