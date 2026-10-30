@@ -31,7 +31,7 @@ function renderSidebar(){
   $('#sidebar').innerHTML=h;
 }
 
-function home(){
+let home=function(){
   S.current=null;save();
   $('#content').innerHTML=`<section class="hero" style="--c:#6c4cf5;--c2:#e2489b"><h2>¡Bienvenido/a! 👋</h2><p>Un curso completo de inglés para aprendices visuales, del nivel <b>A1</b> al <b>C2</b>. Cada módulo tiene explicaciones visuales, ejemplos con traducción, práctica de escritura evaluada al instante y un quiz final.</p><div class="chips"><span>🎨 Visual</span><span>✍️ Escritura</span><span>📝 Quizzes</span><span>💾 Progreso guardado</span></div></section>
   <pre class="diagram">  A1 🌱 ──► A2 🌿 ──► B1 🌳 ──► B2 🚀 ──► C1 🏔️ ──► C2 👑
@@ -44,13 +44,13 @@ function openLevel(id,tab){
   S.current=id;save();
   tab=tab||S.tab||'learn';
   const c=$('#content');
-  c.style.setProperty('--c',lv.color);c.style.setProperty('--c2',lv.color2);
+  [c,document.body].forEach(x=>{x.style.setProperty('--c',lv.color);x.style.setProperty('--c2',lv.color2);});document.querySelector('meta[name=theme-color]').content=lv.color;
   c.innerHTML=`<section class="hero"><div style="font-size:2.5rem">${lv.emoji}</div><h2>Módulo ${lv.n}: ${esc(lv.name)} (${lv.cefr})</h2><p>${esc(lv.desc)}</p><div class="chips">${lv.topics.map(t=>`<span>${t.icon} ${esc(t.title)}</span>`).join('')}</div></section>
   <div class="tabs" role="tablist"><button class="tab" data-tab="learn">📚 Aprender</button><button class="tab" data-tab="write">✍️ Escritura</button><button class="tab" data-tab="listen">🎧 Escuchar</button><button class="tab" data-tab="speak">🎤 Hablar</button><button class="tab" data-tab="quiz">📝 Quiz</button></div><div id="weak"></div><div id="panel"></div>`;
   renderWeak(lv);
   showTab(lv,tab);
 }
-function showTab(lv,tab){
+let showTab=function(lv,tab){
   S.tab=tab;localStorage.setItem(KEY,JSON.stringify(S));window.speechSynthesis&&speechSynthesis.cancel();
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   const p=$('#panel');
@@ -122,16 +122,26 @@ function grade(lv){
   $('#score').scrollIntoView({behavior:'smooth'});
 }
 document.addEventListener('click',e=>{
-  const g=e.target.closest('[data-go]');if(g){e.preventDefault();g.dataset.go==='home'?home():openLevel(g.dataset.go);$('#sidebar').classList.remove('open');window.scrollTo(0,0);return;}
+  const g=e.target.closest('[data-go]');if(g){e.preventDefault();g.dataset.go==='home'?home():openLevel(g.dataset.go);drawer(false);window.scrollTo(0,0);return;}
   const lv=L.find(l=>l.id===S.current);
-  const tb=e.target.closest('[data-tab]');if(tb&&lv){e.preventDefault();showTab(lv,tb.dataset.tab);const h=tb.getAttribute('href');if(h&&h.startsWith('#t-'))setTimeout(()=>{const el=document.querySelector(h);el&&el.scrollIntoView({behavior:'smooth'});},50);$('#sidebar').classList.remove('open');return;}
+  const tb=e.target.closest('[data-tab]');if(tb&&lv){e.preventDefault();showTab(lv,tb.dataset.tab);const h=tb.getAttribute('href');if(h&&h.startsWith('#t-'))setTimeout(()=>{const el=document.querySelector(h);el&&el.scrollIntoView({behavior:'smooth'});},50);drawer(false);return;}
   const d=e.target.closest('[data-done]');if(d){S.topics[d.dataset.done]=!S.topics[d.dataset.done];save();d.classList.toggle('is-done',!!S.topics[d.dataset.done]);d.textContent=S.topics[d.dataset.done]?'✅ Tema completado':'Marcar como completado';return;}
   const c=e.target.closest('[data-check]');if(c&&lv){check(lv,+c.dataset.check);return;}
   const sm=e.target.closest('[data-sample]');if(sm&&lv){const i=+sm.dataset.sample,fb=$('#fb-'+i);fb.className='feedback show partial';fb.innerHTML='👀 Ejemplo de respuesta: <i>'+esc(lv.writing[i].sample)+'</i>';return;}
   if(e.target.closest('[data-retry]')&&lv){showTab(lv,'quiz');return;}
 });
 document.addEventListener('submit',e=>{if(e.target.id==='quizForm'){e.preventDefault();grade(L.find(l=>l.id===S.current));}});
-$('#menuBtn').addEventListener('click',()=>$('#sidebar').classList.toggle('open'));
+function drawer(o){$('#sidebar').classList.toggle('open',o);$('#backdrop').classList.toggle('show',o);document.body.classList.toggle('lock',o);}
+$('#menuBtn').addEventListener('click',()=>drawer(!$('#sidebar').classList.contains('open')));
+$('#backdrop').addEventListener('click',()=>drawer(false));
+/* Barra inferior estilo app */
+function renderBottom(){const lv=L.find(l=>l.id===S.current);const b=$('#bottomNav');
+  const items=lv?[['learn','📚','Aprender'],['write','✍️','Escribir'],['listen','🎧','Escuchar'],['speak','🎤','Hablar'],['quiz','📝','Quiz']]:[];
+  b.innerHTML=(lv?'':'<button class="bn active" data-go="home"><span>🏠</span>Inicio</button><button class="bn" id="bnMenu"><span>📚</span>Niveles</button>')+items.map(i=>`<button class="bn${S.tab===i[0]?' active':''}" data-tab="${i[0]}"><span>${i[1]}</span>${i[2]}</button>`).join('');
+  document.body.classList.toggle('in-level',!!lv);}
+document.addEventListener('click',e=>{if(e.target.closest('#bnMenu'))drawer(true);const t=e.target.closest('.btn,.bn,.tab,.lvl-card,.lvl-btn,.done-btn');if(t&&navigator.vibrate)navigator.vibrate(8);},true);
+const _st=showTab;showTab=function(lv,tab){_st(lv,tab);renderBottom();const p=$('#panel');p.classList.remove('swap');void p.offsetWidth;p.classList.add('swap');if(window.innerWidth<820)window.scrollTo({top:0,behavior:'smooth'});};
+const _home=home;home=function(){_home();renderBottom();};
 $('#resetBtn').addEventListener('click',()=>{if(confirm('¿Seguro que quieres borrar todo tu progreso?')){localStorage.removeItem(KEY);S=load();home();}});
 
 /* ===== Refuerzo de áreas débiles ===== */

@@ -2,10 +2,14 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#6c4cf5">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Inglés Visual">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%236c4cf5%22/%3E%3Ctext x=%2250%22 y=%2268%22 font-size=%2256%22 text-anchor=%22middle%22%3E%F0%9F%8C%88%3C/text%3E%3C/svg%3E">
 <title>Curso de Inglés Visual · A1–C2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
@@ -18,11 +22,13 @@
   <button id="refreshBtn" class="refresh-btn" title="Actualizar a la última versión" aria-label="Actualizar">↻ <span>Actualizar</span></button>
   <div class="global-progress"><span id="globalPct">0%</span><div class="bar"><div id="globalBar"></div></div></div>
 </header>
+<div id="backdrop" class="backdrop"></div>
 <div class="layout">
   <nav id="sidebar" class="sidebar" aria-label="Niveles"></nav>
   <main id="content" class="content" tabindex="-1"></main>
 </div>
 <footer class="footer">Hecho con 💜 para aprendices visuales · Progreso guardado en tu navegador · <button id="resetBtn" class="link-btn">Reiniciar progreso</button></footer>
+<nav id="bottomNav" class="bottom-nav" aria-label="Navegación rápida"></nav>
 <script src="data.js"></script>
 <script src="app.js"></script>
 </body>
