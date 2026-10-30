@@ -147,3 +147,5 @@ pre.diagram{white-space:pre;-webkit-overflow-scrolling:touch;font-size:clamp(.68
   .bn.active{background:linear-gradient(135deg,var(--c,#6c4cf5),var(--c2,#e2489b));color:#fff}
   .bn.active span{transform:translateY(-2px) scale(1.12)}
 }
+
+/* deploy 20261030175144 */
